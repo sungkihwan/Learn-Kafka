@@ -1,0 +1,30 @@
+plugins {
+    id 'java'
+}
+
+group 'com.kafka.kihwan'
+version '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
+
+    // https://mvnrepository.com/artifact/org.apache.kafka/kafka-clients
+    implementation group: 'org.apache.kafka', name: 'kafka-clients', version: '3.0.0'
+
+    // https://mvnrepository.com/artifact/org.slf4j/slf4j-simple
+    implementation group: 'org.slf4j', name: 'slf4j-simple', version: '2.0.0-alpha5'
+
+    // https://mvnrepository.com/artifact/com.twitter/hbc-core
+    implementation group: 'com.twitter', name: 'hbc-core', version: '2.2.0', ext: 'pom'
+
+
+}
+
+test {
+    useJUnitPlatform()
+}
