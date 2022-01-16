@@ -24,37 +24,38 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import static tutorial2.MyKafkaServer.*;
+
 public class TwitterProducer {
 
     Logger logger = LoggerFactory.getLogger(TwitterProducer.class.getName());
 
-    static Map<String, Object> propMap;
+    static Map<String, String> propMap;
     static String consumerKey;
     static String consumerSecret;
     static String token;
     static String secret;
 
-    private final String keyWord = "bitcoin";
-    private final String bootstrapServers = "127.0.0.1:9092";
+    // keywords
+    List<String> terms = Lists.newArrayList("kafka");
 
     public TwitterProducer(){}
 
     public static void main(String[] args) {
         try {
-            propMap = new Yaml().load(new FileReader("key.yml"));
-            consumerKey = (String) propMap.get("consumerKey");
-            consumerSecret = (String) propMap.get("consumerSecret");
-            token = (String) propMap.get("token");
-            secret = (String) propMap.get("secret");
+            propMap = new Yaml().load(new FileReader("myTwitterKey.yml"));
+            consumerKey = propMap.get("consumerKey");
+            consumerSecret = propMap.get("consumerSecret");
+            token = propMap.get("token");
+            secret = propMap.get("secret");
         } catch (FileNotFoundException e) { e.printStackTrace(); }
-
         new TwitterProducer().run();
     }
 
     public void run() {
         logger.info("Setup");
         /** Set up your blocking queues: Be sure to size these properly based on expected TPS of your stream */
-        BlockingQueue<String> msgQueue = new LinkedBlockingQueue<String>(1000);
+        BlockingQueue<String> msgQueue = new LinkedBlockingQueue<String>(CAPACITY);
         // create a twitter client
         Client client = createTwitterClient(msgQueue);
         // create connection
@@ -62,6 +63,15 @@ public class TwitterProducer {
 
         // create a kafka producer
         KafkaProducer<String, String> producer = createKafkaProducer();
+
+        // add a shutdown hook
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            logger.info("shutting down client from twitter..");
+            client.stop();
+            logger.info("closing producer");
+            producer.close();
+            logger.info("done");
+        }));
 
         // loop to send tweets to kafka
         // on a different thread, or multiple different threads....
@@ -75,7 +85,7 @@ public class TwitterProducer {
             }
             if (msg != null) {
                 logger.info(msg);
-                producer.send(new ProducerRecord<>("twitter_tweets", null, msg), new Callback() {
+                producer.send(new ProducerRecord<>(TOPIC, null, msg), new Callback() {
                     @Override
                     public void onCompletion(RecordMetadata metadata, Exception exception) {
                         if (exception != null) {
@@ -88,20 +98,20 @@ public class TwitterProducer {
         logger.info("End of application");
     }
 
-    public Client createTwitterClient(BlockingQueue<String> msgQueue) {
+    private Client createTwitterClient(BlockingQueue<String> msgQueue) {
 
         /** Declare the host you want to connect to, the endpoint, and authentication (basic auth or oauth) */
         Hosts hosebirdHosts = new HttpHosts(Constants.STREAM_HOST);
         StatusesFilterEndpoint hosebirdEndpoint = new StatusesFilterEndpoint();
 
-        List<String> terms = Lists.newArrayList(keyWord);
+        // set keywords
         hosebirdEndpoint.trackTerms(terms);
 
         // These secrets should be read from a config file
         Authentication hosebirdAuth = new OAuth1(consumerKey, consumerSecret, token, secret);
 
         ClientBuilder builder = new ClientBuilder()
-                .name("Hosebird-Client-01")                              // optional: mainly for the logs
+                .name(TWITTER_CLIENT_NAME)                              // optional: mainly for the logs
                 .hosts(hosebirdHosts)
                 .authentication(hosebirdAuth)
                 .endpoint(hosebirdEndpoint)
@@ -114,7 +124,7 @@ public class TwitterProducer {
     private KafkaProducer<String, String> createKafkaProducer() {
         // create Producer properties
         Properties properties = new Properties();
-        properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOT_STRAP_SERVERS);
         properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
 
