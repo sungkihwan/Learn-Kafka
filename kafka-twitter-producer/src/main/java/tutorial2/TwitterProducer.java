@@ -16,7 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
 
-import java.io.*;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -30,24 +31,24 @@ public class TwitterProducer {
 
     Logger logger = LoggerFactory.getLogger(TwitterProducer.class.getName());
 
-    static Map<String, String> propMap;
-    static String consumerKey;
-    static String consumerSecret;
-    static String token;
-    static String secret;
+    private static Map<String, String> propMap;
+    private static String consumerKey;
+    private static String consumerSecret;
+    private static String token;
+    private static String tokenSecret;
 
     // keywords
-    List<String> terms = Lists.newArrayList("kafka");
+    private final List<String> terms = Lists.newArrayList("bitcoin", "usa", "politics", "sport", "soccer");
 
     public TwitterProducer(){}
 
     public static void main(String[] args) {
         try {
             propMap = new Yaml().load(new FileReader("myTwitterKey.yml"));
-            consumerKey = propMap.get("consumerKey");
-            consumerSecret = propMap.get("consumerSecret");
-            token = propMap.get("token");
-            secret = propMap.get("secret");
+            consumerKey = propMap.get("APIKey");
+            consumerSecret = propMap.get("APIKeySecret");
+            token = propMap.get("AccessToken");
+            tokenSecret = propMap.get("AccessTokenSecret");
         } catch (FileNotFoundException e) { e.printStackTrace(); }
         new TwitterProducer().run();
     }
@@ -108,7 +109,7 @@ public class TwitterProducer {
         hosebirdEndpoint.trackTerms(terms);
 
         // These secrets should be read from a config file
-        Authentication hosebirdAuth = new OAuth1(consumerKey, consumerSecret, token, secret);
+        Authentication hosebirdAuth = new OAuth1(consumerKey, consumerSecret, token, tokenSecret);
 
         ClientBuilder builder = new ClientBuilder()
                 .name(TWITTER_CLIENT_NAME)                              // optional: mainly for the logs
@@ -127,6 +128,17 @@ public class TwitterProducer {
         properties.setProperty(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, BOOT_STRAP_SERVERS);
         properties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         properties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+
+        // create safe Producer
+        properties.setProperty(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
+        properties.setProperty(ProducerConfig.ACKS_CONFIG, "all");
+        properties.setProperty(ProducerConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE));
+        properties.setProperty(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, "5");
+
+        // high throughput producer (at the expense of a bit of latency and CPU usage)
+        properties.setProperty(ProducerConfig.COMPRESSION_TYPE_CONFIG, "snappy");
+        properties.setProperty(ProducerConfig.LINGER_MS_CONFIG, "20");
+        properties.setProperty(ProducerConfig.BATCH_SIZE_CONFIG, Integer.toString(32*1024)); // 32KB batch size
 
         // create the Producer
         KafkaProducer<String, String> producer = new KafkaProducer<String, String>(properties);
